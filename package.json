@@ -1,12 +1,12 @@
 {
-  "name": "skiddyskidskid",
+  "name": "proxy-server",
   "version": "1.0.0",
-  "main": "server.js", // or app.js if that's your entry point
+  "main": "server.js",
   "scripts": {
-    "start": "node server.js" // change to app.js if you use that
+    "start": "node server.js"
   },
   "dependencies": {
-    "express": "^your-version",
-    "request": "^your-version"
+    "express": "^4.17.3",
+    "request": "^2.88.2"
   }
 }
