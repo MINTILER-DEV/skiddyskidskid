@@ -10,6 +10,13 @@ app.use(express.json());
 
 // Enable CORS for all routes
 app.use(cors());
+app.options('*', cors()); // Enable pre-flight for all routes
+
+app.use((err, req, res, next) => {
+    console.error(err); // Log the error
+    res.status(err.status || 500).send(err.message);
+});
+
 
 // Route to render HTML from a provided URL
 app.get('/api/render', async (req, res) => {
