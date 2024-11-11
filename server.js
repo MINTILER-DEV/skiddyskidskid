@@ -1,52 +1,43 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const axios = require('axios');
 const cors = require('cors');
-
+const puppeteer = require('puppeteer');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware to handle JSON requests
-app.use(express.json());
-
 // Enable CORS for all routes
 app.use(cors());
-app.options('*', cors()); // Enable pre-flight for all routes
 
-app.use((err, req, res, next) => {
-    console.error(err); // Log the error
-    res.status(err.status || 500).send(err.message);
-});
+app.get('/proxy', async (req, res) => {
+    const gameUrl = req.query.url;
 
-
-// Route to render HTML from a provided URL
-app.get('/api/render', async (req, res) => {
-    const targetUrl = req.query.url; // Get the URL from the query parameter
-
-    if (!targetUrl) {
-        return res.status(400).send('Missing "url" query parameter.');
+    if (!gameUrl) {
+        return res.status(400).send('No URL provided');
     }
 
     try {
-        const browser = await puppeteer.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath(),
+        // Launch headless browser using Puppeteer
+        const browser = await puppeteer.launch({ headless: true });
+        const page = await browser.newPage();
+        
+        // Go to the target URL
+        await page.goto(gameUrl, {
+            waitUntil: 'networkidle2', // Wait for the page to fully load
         });
 
-        const page = await browser.newPage();
-        await page.goto(targetUrl, { waitUntil: 'networkidle2' });
-        const html = await page.content();
+        // Get the rendered HTML content
+        const content = await page.content();
+
+        // Send back the rendered HTML content
+        res.set('Content-Type', 'text/html');
+        res.send(content);
 
         await browser.close();
-
-        res.send(html); // Send the rendered HTML back to the client
     } catch (error) {
-        console.error(error);
-        res.status(500).send('An error occurred while rendering the page.');
+        res.status(500).send('Error fetching the game');
     }
 });
 
-// Start the server
 app.listen(PORT, () => {
-    console.log(`Headless browser API is running on port ${PORT}`);
+    console.log(`Proxy server running on port ${PORT}`);
 });
