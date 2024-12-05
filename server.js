@@ -1,53 +1,68 @@
 const express = require('express');
 const axios = require('axios');
-const cors = require('cors');
 const puppeteer = require('puppeteer');
+const urlLib = require('url');
+const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Enable CORS for all routes
 app.use(cors());
 
+// Serve static files like HTML, CSS, JS if necessary
+app.use(express.static('public'));
+
 app.get('/proxy', async (req, res) => {
-    const urls = req.query.urls; // Accept comma-separated URLs
+    const { url } = req.query;
 
-    if (!urls) {
-        return res.status(400).send('No URLs provided');
+    if (!url) {
+        return res.status(400).send('No URL provided');
     }
-
-    const urlList = urls.split(','); // Split URLs into an array
 
     try {
-        // Launch headless browser
+        // Launch headless browser using Puppeteer
         const browser = await puppeteer.launch({ headless: true });
-        const pagesContent = {};
+        const page = await browser.newPage();
 
-        // Iterate over the URLs
-        for (let i = 0; i < urlList.length; i++) {
-            const url = urlList[i].trim();
-            const page = await browser.newPage();
+        // Navigate to the provided URL
+        await page.goto(url, { waitUntil: 'networkidle2' });
 
-            await page.goto(url, {
-                waitUntil: 'networkidle2', // Wait for the page to fully load
-            });
+        // Get rendered HTML content
+        let content = await page.content();
 
-            // Get the rendered HTML content
-            const content = await page.content();
-            pagesContent[`tab_${i + 1}`] = content;
+        // Convert relative links to absolute links
+        content = await convertRelativeLinksToAbsolute(page, content, url);
 
-            // Close the tab after fetching content
-            await page.close();
-        }
+        // Return the updated content in the response
+        res.set('Content-Type', 'text/html');
+        res.send(content);
 
         await browser.close();
-
-        // Return all tab contents as JSON
-        res.json(pagesContent);
     } catch (error) {
         console.error(error);
-        res.status(500).send('Error fetching the pages');
+        res.status(500).send('Error fetching the page');
     }
 });
+
+// Utility function to convert relative links to absolute links
+async function convertRelativeLinksToAbsolute(page, htmlContent, baseUrl) {
+    return await page.evaluate((baseUrl, htmlContent) => {
+        const base = document.createElement('base');
+        base.href = baseUrl;
+        document.head.appendChild(base);
+        const doc = new DOMParser().parseFromString(htmlContent, 'text/html');
+        const absoluteLinks = doc.querySelectorAll('a[href], img[src], link[href], script[src]');
+
+        absoluteLinks.forEach(el => {
+            let link = el.getAttribute(el.tagName === 'A' ? 'href' : 'src');
+            if (link && !link.startsWith('http') && !link.startsWith('data:')) {
+                el.setAttribute(el.tagName === 'A' ? 'href' : 'src', new URL(link, baseUrl).href);
+            }
+        });
+
+        return doc.documentElement.outerHTML;
+    }, baseUrl, htmlContent);
+}
 
 app.listen(PORT, () => {
     console.log(`Proxy server running on port ${PORT}`);
