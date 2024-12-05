@@ -9,32 +9,43 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 
 app.get('/proxy', async (req, res) => {
-    const gameUrl = req.query.url;
+    const urls = req.query.urls; // Accept comma-separated URLs
 
-    if (!gameUrl) {
-        return res.status(400).send('No URL provided');
+    if (!urls) {
+        return res.status(400).send('No URLs provided');
     }
 
+    const urlList = urls.split(','); // Split URLs into an array
+
     try {
-        // Launch headless browser using Puppeteer
+        // Launch headless browser
         const browser = await puppeteer.launch({ headless: true });
-        const page = await browser.newPage();
-        
-        // Go to the target URL
-        await page.goto(gameUrl, {
-            waitUntil: 'networkidle2', // Wait for the page to fully load
-        });
+        const pagesContent = {};
 
-        // Get the rendered HTML content
-        const content = await page.content();
+        // Iterate over the URLs
+        for (let i = 0; i < urlList.length; i++) {
+            const url = urlList[i].trim();
+            const page = await browser.newPage();
 
-        // Send back the rendered HTML content
-        res.set('Content-Type', 'text/html');
-        res.send(content);
+            await page.goto(url, {
+                waitUntil: 'networkidle2', // Wait for the page to fully load
+            });
+
+            // Get the rendered HTML content
+            const content = await page.content();
+            pagesContent[`tab_${i + 1}`] = content;
+
+            // Close the tab after fetching content
+            await page.close();
+        }
 
         await browser.close();
+
+        // Return all tab contents as JSON
+        res.json(pagesContent);
     } catch (error) {
-        res.status(500).send('Error fetching the game');
+        console.error(error);
+        res.status(500).send('Error fetching the pages');
     }
 });
 
